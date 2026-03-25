@@ -1,0 +1,26 @@
+## Python
+.venv310/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+## Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+
+## Logs / temp
+*.log
+.DS_Store
+._*
+
+## Dataset generator outputs (synthetic/derived)
+data/*.csv
+data/*.json
+data/*.npz
+
