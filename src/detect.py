@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable
 
 from .preprocess import TimeSeries
-from .model import DetectionResult, OrionTimeSeriesModel
+from .model import OrionTimeSeriesModel
 
 
 @dataclass
@@ -26,8 +25,9 @@ class AnomalyPoint:
 
 def detect_anomalies(model: OrionTimeSeriesModel, series: TimeSeries) -> list[AnomalyPoint]:
     result = model.predict(series)
-    # Placeholder: if result.scores is aligned to input points, map them.
-    # Since this is a stub, return empty for now.
-    _ = result
-    return []
+    out: list[AnomalyPoint] = []
+    for ts, score, flag in zip(series.timestamps, result.scores, result.is_anomaly):
+        if flag:
+            out.append(AnomalyPoint(timestamp=ts, score=score))
+    return out
 
