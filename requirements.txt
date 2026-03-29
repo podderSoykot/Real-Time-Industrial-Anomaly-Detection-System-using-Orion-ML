@@ -1,8 +1,7 @@
-# Use this requirements file with Python 3.10 virtualenv.
-# Install tooling first:
-#   python -m pip install --upgrade "pip<24" "setuptools<58" wheel
-#
-# NOTE:
-# `orion-ml` has legacy dependencies (notably a very old `numpy`).
-# Keep requirements minimal so pip can resolve compatible versions.
-orion-ml==0.1.0
+# Core stack (works on Windows without TensorFlow / Orion).
+# Install: pip install -r requirements.txt
+pandas>=2.0
+fastapi
+uvicorn
+streamlit
+matplotlib
