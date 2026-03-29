@@ -95,6 +95,8 @@ pip install -r requirements-orion.txt
 
 Outputs `data/predictions_orion_test.csv` by default.
 
+`train_orion.py` also saves **`data/models/orion_pretrained.pkl`** (Orion’s native pickle). The FastAPI app loads it at startup when present; `POST /detect` with `use_orion: true` and **`refit_from_train: false`** (default) runs **inference only**—no per-request training. Override the path with env **`ORION_PRETRAINED_PATH`**, or pass **`refit_from_train: true`** to fit from `train_csv` every time.
+
 With the default generator, **anomaly window 2 is placed in the test split** (indices ≥ train cutoff) so `main.py` can report non-zero detections. If both injected windows sit only in training, test metrics will often show **0 anomalies** even though the pipeline works.
 
 Outputs:

@@ -5,3 +5,4 @@ fastapi
 uvicorn
 streamlit
 matplotlib
+orion-ml>=0.6.0

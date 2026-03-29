@@ -8,6 +8,8 @@ Prerequisites:
 Usage:
   python train_orion.py
   python train_orion.py --lstm-epochs 10 --out data/predictions_orion_test.csv
+
+Writes ``data/models/orion_pretrained.pkl`` by default for the FastAPI app (``--no-save-model`` to skip).
 """
 
 from __future__ import annotations
@@ -29,6 +31,17 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path("data/predictions_orion_test.csv"))
     parser.add_argument("--pipeline", type=str, default="lstm_dynamic_threshold")
     parser.add_argument("--lstm-epochs", type=int, default=5)
+    parser.add_argument(
+        "--save-model",
+        type=Path,
+        default=Path("data/models/orion_pretrained.pkl"),
+        help="Path to save fitted Orion pickle for the API (Orion.save). Ignored with --no-save-model.",
+    )
+    parser.add_argument(
+        "--no-save-model",
+        action="store_true",
+        help="Do not write a pickle file after training.",
+    )
     args = parser.parse_args()
 
     if not orion_import_available():
@@ -64,6 +77,11 @@ def main() -> int:
         print("ERROR: Orion fit did not succeed (fell back to baseline).", file=sys.stderr)
         print(err, file=sys.stderr)
         return 2
+
+    if not args.no_save_model:
+        args.save_model.parent.mkdir(parents=True, exist_ok=True)
+        model.save_orion(args.save_model)
+        print("Saved Orion model:", args.save_model.resolve())
 
     result = model.predict(test)
     anomalies = detect_anomalies(model, test)
