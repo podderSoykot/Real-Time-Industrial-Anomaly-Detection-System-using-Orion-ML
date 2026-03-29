@@ -23,4 +23,5 @@ __pycache__/
 data/*.csv
 data/*.json
 data/*.npz
+data/models/*.pkl
 

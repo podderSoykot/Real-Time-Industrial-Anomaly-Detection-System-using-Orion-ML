@@ -1,7 +1,0 @@
-# Optional: Sintel Orion ML (pulls TensorFlow — large; Windows path-length issues are common).
-# Install core first:  pip install -r requirements.txt
-# Then:               pip install -r requirements-orion.txt
-#
-# If you see OSError / missing .cpp.inc under tensorflow\include\..., see README
-# "Windows: Orion / TensorFlow install failures".
-orion-ml>=0.6.0

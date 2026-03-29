@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import statistics
+from pathlib import Path
 from typing import Any, Literal
 
 from .preprocess import TimeSeries
@@ -161,6 +162,35 @@ class OrionTimeSeriesModel:
         """If ``fit`` fell back to baseline, the exception message from Orion ``fit``."""
         return self._last_error
 
+    def save_orion(self, path: str | Path) -> None:
+        """Persist a fitted Orion instance (``orion.Orion.save`` pickle). Requires ``fitted_backend == 'orion'``."""
+        if self._backend != "orion" or self._orion is None:
+            raise RuntimeError("No fitted Orion model to save (backend is not orion).")
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        self._orion.save(str(out))
+
+    @classmethod
+    def from_orion_pickle(cls, path: str | Path, config: dict[str, Any] | None = None) -> OrionTimeSeriesModel:
+        """Load a model produced by ``save_orion`` / ``Orion.save`` for inference-only ``predict`` calls."""
+        OrionCls = _try_orion()
+        if OrionCls is None:
+            raise RuntimeError(
+                "orion-ml is not installed in this Python environment; cannot unpickle Orion. "
+                "Use the same interpreter where TensorFlow and orion-ml are installed."
+            )
+        orion = OrionCls.load(str(path))
+        cfg: dict[str, Any] = dict(config or {})
+        pipe = getattr(orion, "_pipeline", None)
+        if "pipeline" not in cfg and isinstance(pipe, str):
+            cfg["pipeline"] = pipe
+        m = cls(cfg)
+        m._orion = orion
+        m._backend = "orion"
+        m._baseline = None
+        m._last_error = None
+        return m
+
     def fit(self, train_series: TimeSeries) -> None:
         if not train_series.values:
             raise ValueError("Training series is empty.")
@@ -232,13 +262,17 @@ class OrionTimeSeriesModel:
         infer_df = _timeseries_to_orion_df(series)
         events = self._orion.detect(infer_df, visualization=False)
         scores, flags, threshold = _intervals_to_point_labels(series, events)
+        pipe = self.config.get("pipeline")
+        if not pipe:
+            p = getattr(self._orion, "_pipeline", None)
+            pipe = p if isinstance(p, str) else "lstm_dynamic_threshold"
         return DetectionResult(
             scores=scores,
             is_anomaly=flags,
             threshold=threshold,
             meta={
                 "backend": "orion_ml",
-                "pipeline": self.config.get("pipeline", "lstm_dynamic_threshold"),
+                "pipeline": pipe,
                 "events_rows": int(len(events)) if events is not None else 0,
             },
         )
