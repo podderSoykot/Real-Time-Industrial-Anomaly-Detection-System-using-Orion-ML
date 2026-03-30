@@ -5,6 +5,12 @@ FastAPI anomaly detection API.
 it is loaded at startup. ``POST /detect`` with ``use_orion=true`` and ``refit_from_train=false``
 (default) runs **inference only** on that pickle—no refit per request.
 
+**Live stream:** continuous values are under ``/stream`` — ``POST /stream/ingest``, ``WebSocket /stream/ws``
+(see ``GET /stream/``). Payloads may include ``machine_name``, ``place``, ``line``, ``sensor_id``, ``zone``, ``shift``, ``notes``.
+Demo sine wave is **on by default**; set ``STREAM_SYNTHETIC=0`` to disable.
+
+**Batch detect:** ``POST /detect`` accepts optional asset fields on each point and optional request-level defaults; anomaly rows echo that metadata.
+
 Train the pickle with::
 
   python train_orion.py
@@ -35,7 +41,10 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.stream_api import start_stream_workers, stop_stream_workers, stream_router
 
 from src.model import OrionTimeSeriesModel, orion_import_available
 from src.preprocess import TimeSeries, load_csv_time_series
@@ -97,6 +106,13 @@ def _resolve_train_csv_path(train_csv: Optional[str]) -> Path:
 class PointIn(BaseModel):
     timestamp: datetime
     value: float
+    machine_name: Optional[str] = Field(default=None, description="Equipment id (optional).")
+    place: Optional[str] = Field(default=None, description="Site / building / zone label.")
+    line: Optional[str] = Field(default=None, description="Production line or cell.")
+    sensor_id: Optional[str] = Field(default=None, description="Sensor channel id.")
+    zone: Optional[str] = Field(default=None, description="Floor / area code.")
+    shift: Optional[str] = Field(default=None, description="Shift id (e.g. A, Night).")
+    notes: Optional[str] = Field(default=None, description="Free-text context.")
 
 
 class DetectRequest(BaseModel):
@@ -112,6 +128,8 @@ class DetectRequest(BaseModel):
                 "use_orion": True,
                 "refit_from_train": False,
                 "train_csv": None,
+                "machine_name": None,
+                "place": None,
             }
         }
     )
@@ -139,6 +157,16 @@ class DetectRequest(BaseModel):
             "Relative paths are from the **repository root**."
         ),
     )
+    machine_name: Optional[str] = Field(
+        default=None,
+        description="Default equipment id for anomaly rows when a point omits it.",
+    )
+    place: Optional[str] = Field(default=None, description="Default site / place.")
+    line: Optional[str] = Field(default=None, description="Default production line.")
+    sensor_id: Optional[str] = Field(default=None, description="Default sensor id.")
+    zone: Optional[str] = Field(default=None, description="Default floor / area.")
+    shift: Optional[str] = Field(default=None, description="Default shift.")
+    notes: Optional[str] = Field(default=None, description="Default notes for anomalies.")
 
 
 class DetectResponse(BaseModel):
@@ -152,10 +180,28 @@ class DetectResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _try_load_orion_pretrained()
-    yield
+    await start_stream_workers()
+    try:
+        yield
+    finally:
+        await stop_stream_workers()
 
 
 app = FastAPI(title="Industrial Anomaly Detection API", version="1.0.0", lifespan=lifespan)
+app.include_router(stream_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _load_train_series(
@@ -183,14 +229,29 @@ def _load_train_series(
     return model
 
 
-def _request_to_series(points: list[PointIn]) -> TimeSeries:
+def _request_to_series(points: list[PointIn]) -> tuple[TimeSeries, list[PointIn]]:
     if not points:
         raise HTTPException(status_code=400, detail="`points` must not be empty.")
     points_sorted = sorted(points, key=lambda p: p.timestamp)
-    return TimeSeries(
-        timestamps=[p.timestamp for p in points_sorted],
-        values=[p.value for p in points_sorted],
+    return (
+        TimeSeries(
+            timestamps=[p.timestamp for p in points_sorted],
+            values=[p.value for p in points_sorted],
+        ),
+        points_sorted,
     )
+
+
+def _merge_asset(p: PointIn, req: DetectRequest) -> dict[str, Optional[str]]:
+    return {
+        "machine_name": p.machine_name or req.machine_name,
+        "place": p.place or req.place,
+        "line": p.line or req.line,
+        "sensor_id": p.sensor_id or req.sensor_id,
+        "zone": p.zone or req.zone,
+        "shift": p.shift or req.shift,
+        "notes": p.notes or req.notes,
+    }
 
 
 @app.get("/")
@@ -199,6 +260,7 @@ def root() -> dict:
         "service": "industrial-anomaly-api",
         "health": "/health",
         "detect": "POST /detect",
+        "stream": "GET /stream/ — WebSocket /stream/ws, POST /stream/ingest",
         "docs": "/docs",
         "pretrained_orion_loaded": _ORION_PRETRAINED is not None,
         "pretrained_orion_path": str(pretrained_orion_path()),
@@ -224,7 +286,7 @@ def detect(req: DetectRequest) -> DetectResponse:
         model = _load_train_series(req.train_csv, q=q, use_orion=False)
         inference_source = "baseline_zscore_train_csv"
 
-    series = _request_to_series(req.points)
+    series, points_sorted = _request_to_series(req.points)
 
     try:
         result = model.predict(series)
@@ -232,15 +294,16 @@ def detect(req: DetectRequest) -> DetectResponse:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}") from e
 
     anomalies = []
-    for ts, value, score, flag in zip(series.timestamps, series.values, result.scores, result.is_anomaly):
+    for p, score, flag in zip(points_sorted, result.scores, result.is_anomaly):
         if flag:
-            anomalies.append(
-                {
-                    "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S"),
-                    "value": value,
-                    "score": score,
-                }
-            )
+            asset = _merge_asset(p, req)
+            row = {
+                "timestamp": p.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                "value": p.value,
+                "score": score,
+                **{k: v for k, v in asset.items() if v is not None},
+            }
+            anomalies.append(row)
     meta = dict(result.meta or {})
     meta["fitted_backend"] = model.fitted_backend
     meta["inference_source"] = inference_source

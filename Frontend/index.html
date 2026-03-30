@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Industrial Anomaly Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="bg-mesh" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <div class="layout">
+      <header class="header glass">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+              <defs>
+                <linearGradient id="g1" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#22d3ee" />
+                  <stop offset="0.5" stop-color="#0ea5e9" />
+                  <stop offset="1" stop-color="#f97316" />
+                </linearGradient>
+              </defs>
+              <rect width="40" height="40" rx="11" fill="url(#g1)" />
+              <path
+                d="M10 26h4l8-18 4 10h4l-6-14h-4L10 26z"
+                fill="rgba(15,23,42,0.35)"
+              />
+            </svg>
+          </div>
+          <div class="brand-text">
+            <div class="title-row">
+              <h1>Anomaly Monitor</h1>
+              <span class="badge">Live</span>
+            </div>
+            <p class="subtitle">Real-time sensor stream · rolling z-score · Orion API</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <label class="field-inline">
+            <span>API base</span>
+            <input type="url" id="apiBase" value="http://127.0.0.1:8000" autocomplete="off" placeholder="http://127.0.0.1:8000" />
+          </label>
+          <div class="btn-row">
+            <button type="button" class="btn btn-ghost" id="btnHealth">Check API</button>
+            <button type="button" class="btn btn-primary" id="btnWs">Connect stream</button>
+            <button type="button" class="btn btn-outline" id="btnWsStop" disabled>Disconnect</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="kpis" aria-label="Status">
+        <article class="kpi kpi--api">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">API</span>
+            <span class="kpi-value" id="kpiApi">—</span>
+          </div>
+        </article>
+        <article class="kpi kpi--ws">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">Stream WS</span>
+            <span class="kpi-value" id="kpiWs">—</span>
+          </div>
+        </article>
+        <article class="kpi kpi--buf">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">Buffered points</span>
+            <span class="kpi-value" id="kpiBuffered">—</span>
+          </div>
+        </article>
+        <article class="kpi kpi--sub">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">WS subscribers</span>
+            <span class="kpi-value" id="kpiClients">—</span>
+          </div>
+        </article>
+        <article class="kpi kpi--accent">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">Last value</span>
+            <span class="kpi-value mono" id="kpiLastVal">—</span>
+          </div>
+        </article>
+        <article class="kpi kpi--alert">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">Session anomalies</span>
+            <span class="kpi-value" id="kpiAnomalies">0</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="spotlight" id="anomalySpotlight" hidden aria-live="polite">
+        <div class="spotlight-inner">
+          <span class="spotlight-badge">Latest anomaly</span>
+          <div class="spotlight-grid">
+            <div class="spotlight-field">
+              <span class="spotlight-label">Machine</span>
+              <span class="spotlight-value" id="spotMachine">—</span>
+            </div>
+            <div class="spotlight-field">
+              <span class="spotlight-label">Place</span>
+              <span class="spotlight-value" id="spotPlace">—</span>
+            </div>
+            <div class="spotlight-field">
+              <span class="spotlight-label">Line</span>
+              <span class="spotlight-value" id="spotLine">—</span>
+            </div>
+            <div class="spotlight-field">
+              <span class="spotlight-label">Sensor</span>
+              <span class="spotlight-value mono" id="spotSensor">—</span>
+            </div>
+            <div class="spotlight-field">
+              <span class="spotlight-label">Zone</span>
+              <span class="spotlight-value" id="spotZone">—</span>
+            </div>
+            <div class="spotlight-field">
+              <span class="spotlight-label">Shift</span>
+              <span class="spotlight-value" id="spotShift">—</span>
+            </div>
+            <div class="spotlight-field spotlight-field--wide">
+              <span class="spotlight-label">Time · value · score</span>
+              <span class="spotlight-value mono" id="spotMetrics">—</span>
+            </div>
+            <div class="spotlight-field spotlight-field--full">
+              <span class="spotlight-label">Notes</span>
+              <span class="spotlight-value" id="spotNotes">—</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <main class="grid">
+        <section class="panel chart-panel glow-border">
+          <div class="panel-head panel-head--chart">
+            <div class="panel-title">
+              <h2>Live signal</h2>
+              <span class="chip">Real-time</span>
+            </div>
+            <div class="signal-tabs" role="tablist" aria-label="Time resolution">
+              <button type="button" class="signal-tab is-active" data-mode="second" role="tab" aria-selected="true">
+                1s
+              </button>
+              <button type="button" class="signal-tab" data-mode="30s" role="tab" aria-selected="false">30s</button>
+              <button type="button" class="signal-tab" data-mode="minute" role="tab" aria-selected="false">1m</button>
+            </div>
+            <span class="hint hint--chart" id="chartResolutionHint"
+              >1s = per-second buckets · 30s = 30-second buckets · 1m = per-minute · Cyan value · Amber score</span
+            >
+          </div>
+          <div class="chart-wrap">
+            <canvas id="chartLive" aria-label="Live time series chart"></canvas>
+          </div>
+        </section>
+
+        <aside class="panel side-panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>Anomaly log</h2>
+              <span class="chip chip--warn">Detected</span>
+            </div>
+            <span class="hint">Machine · place · line · sensor</span>
+          </div>
+          <ul class="anomaly-list" id="anomalyList"></ul>
+          <div class="panel-foot">
+            <p class="hint">
+              Feed via <code>python -m app.Sent_data_over_stream</code> or demo stream on the API
+              (<code>STREAM_SYNTHETIC=0</code> to disable).
+            </p>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="footer glass-footer">
+        <span class="footer-dot" aria-hidden="true"></span>
+        <span id="footerMsg">Configure API base, then connect the stream.</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
