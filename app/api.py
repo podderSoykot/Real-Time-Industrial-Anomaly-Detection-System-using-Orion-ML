@@ -40,6 +40,17 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# Load environment variables from `.env` (if present).
+# Important: `app.stream_api` reads env vars at import-time, so `.env` must be loaded
+# before importing `app.stream_api`.
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv(dotenv_path=_PROJECT_ROOT / ".env", override=False)
+except Exception:
+    # If `python-dotenv` is not installed or `.env` is missing, just proceed.
+    pass
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field

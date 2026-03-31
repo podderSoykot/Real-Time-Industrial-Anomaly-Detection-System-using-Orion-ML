@@ -2,6 +2,12 @@
 
 This repo provides a starting point for building a streaming anomaly detection system using **Orion ML** on time-series sensor data.
 
+## Dashboard Preview
+
+Latest anomaly dashboard snapshot:
+
+![Anomaly Dashboard](snap.png)
+
 ## Dataset
 
 The project includes:
