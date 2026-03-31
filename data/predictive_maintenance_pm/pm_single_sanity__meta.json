@@ -1,0 +1,112 @@
+{
+  "name": "pm_single_sanity",
+  "mode": "predictive_maintenance_supervised",
+  "start": "2024-01-01 00:00:00",
+  "interval_sec": 1,
+  "days": 0,
+  "total_points": 167,
+  "horizon_sec": 3600,
+  "seed": 1,
+  "machines": [
+    {
+      "machine_id": "M01",
+      "machine_name": "Machine-M01",
+      "failure_time_sec": 165,
+      "failure_timestamp": "2024-01-01 00:02:45",
+      "sensors": [
+        {
+          "sensor_id": "M01-S01",
+          "curve_type": "linear",
+          "amplitude": 0.9570966360351904,
+          "noise_std": 0.08945221045103291,
+          "accel_mag": 1.1540330230986025,
+          "shock_mag": 4.606371890891052,
+          "shock_sigma_sec": 98.87233511355132,
+          "anomaly_label_start_sec": -1,
+          "anomaly_label_end_sec": 165,
+          "state_low_start_sec": -1,
+          "state_moderate_start_sec": 55,
+          "state_high_start_sec": 110
+        },
+        {
+          "sensor_id": "M01-S02",
+          "curve_type": "weibull",
+          "amplitude": 1.2058738950670747,
+          "noise_std": 0.12147360989495304,
+          "accel_mag": 0.3040015013671103,
+          "shock_mag": 3.7815487762192057,
+          "shock_sigma_sec": 92.15400323407826,
+          "anomaly_label_start_sec": -1,
+          "anomaly_label_end_sec": 165,
+          "state_low_start_sec": -1,
+          "state_moderate_start_sec": 55,
+          "state_high_start_sec": 110
+        },
+        {
+          "sensor_id": "M01-S03",
+          "curve_type": "weibull",
+          "amplitude": 0.6428259762469749,
+          "noise_std": 0.0330535033192153,
+          "accel_mag": 1.3286836983076435,
+          "shock_mag": 5.756596651114043,
+          "shock_sigma_sec": 58.12042376882124,
+          "anomaly_label_start_sec": -1,
+          "anomaly_label_end_sec": 165,
+          "state_low_start_sec": -1,
+          "state_moderate_start_sec": 55,
+          "state_high_start_sec": 110
+        }
+      ]
+    },
+    {
+      "machine_id": "M02",
+      "machine_name": "Machine-M02",
+      "failure_time_sec": 165,
+      "failure_timestamp": "2024-01-01 00:02:45",
+      "sensors": [
+        {
+          "sensor_id": "M02-S01",
+          "curve_type": "exp",
+          "amplitude": 0.910368332782249,
+          "noise_std": 0.08254651123806864,
+          "accel_mag": 1.2420432586255163,
+          "shock_mag": 2.9323378010302905,
+          "shock_sigma_sec": 43.086654154098426,
+          "anomaly_label_start_sec": -1,
+          "anomaly_label_end_sec": 165,
+          "state_low_start_sec": -1,
+          "state_moderate_start_sec": 55,
+          "state_high_start_sec": 110
+        },
+        {
+          "sensor_id": "M02-S02",
+          "curve_type": "weibull",
+          "amplitude": 1.8971092733002122,
+          "noise_std": 0.07994159266732154,
+          "accel_mag": 2.040912687460059,
+          "shock_mag": 5.688754249879549,
+          "shock_sigma_sec": 30.00002710961272,
+          "anomaly_label_start_sec": -1,
+          "anomaly_label_end_sec": 165,
+          "state_low_start_sec": -1,
+          "state_moderate_start_sec": 55,
+          "state_high_start_sec": 110
+        },
+        {
+          "sensor_id": "M02-S03",
+          "curve_type": "weibull",
+          "amplitude": 0.7692459437281289,
+          "noise_std": 0.06992342224321549,
+          "accel_mag": 1.67082037440821,
+          "shock_mag": 4.844767078781119,
+          "shock_sigma_sec": 113.64405867994596,
+          "anomaly_label_start_sec": -1,
+          "anomaly_label_end_sec": 165,
+          "state_low_start_sec": -1,
+          "state_moderate_start_sec": 55,
+          "state_high_start_sec": 110
+        }
+      ]
+    }
+  ]
+}

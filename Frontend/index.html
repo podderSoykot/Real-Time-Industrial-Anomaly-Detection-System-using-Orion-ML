@@ -99,6 +99,20 @@
             <span class="kpi-value" id="kpiAnomalies">0</span>
           </div>
         </article>
+        <article class="kpi kpi--detect">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">Detect mode</span>
+            <span class="kpi-value" id="kpiDetectMode">—</span>
+          </div>
+        </article>
+        <article class="kpi kpi--model">
+          <span class="kpi-icon" aria-hidden="true"></span>
+          <div class="kpi-body">
+            <span class="kpi-label">Model loaded</span>
+            <span class="kpi-value" id="kpiModelLoaded">—</span>
+          </div>
+        </article>
       </section>
 
       <section class="spotlight" id="anomalySpotlight" hidden aria-live="polite">
@@ -158,6 +172,11 @@
             <span class="hint hint--chart" id="chartResolutionHint"
               >1s = per-second buckets · 30s = 30-second buckets · 1m = per-minute · Cyan value · Amber score</span
             >
+            <div class="state-legend" aria-label="Detection state legend">
+              <span class="state-pill state-pill--green">GREEN</span>
+              <span class="state-pill state-pill--yellow">YELLOW</span>
+              <span class="state-pill state-pill--red">RED</span>
+            </div>
           </div>
           <div class="chart-wrap">
             <canvas id="chartLive" aria-label="Live time series chart"></canvas>
@@ -170,7 +189,30 @@
               <h2>Anomaly log</h2>
               <span class="chip chip--warn">Detected</span>
             </div>
-            <span class="hint">Machine · place · line · sensor</span>
+            <span class="hint">Filter by machine or sensor</span>
+          </div>
+          <div class="filters">
+            <label class="field-inline">
+              <span>Machine</span>
+              <select id="filterMachine">
+                <option value="">All machines</option>
+              </select>
+            </label>
+            <label class="field-inline">
+              <span>Sensor</span>
+              <select id="filterSensor">
+                <option value="">All sensors</option>
+              </select>
+            </label>
+            <button type="button" class="btn btn-ghost btn-filter-clear" id="btnFilterClear">
+              Clear
+            </button>
+          </div>
+          <div class="anomaly-summary" aria-label="Anomaly summary">
+            <span class="summary-item">Shown: <strong id="sumShown">0</strong></span>
+            <span class="summary-item summary-item--green">GREEN: <strong id="sumLow">0</strong></span>
+            <span class="summary-item summary-item--yellow">YELLOW: <strong id="sumMed">0</strong></span>
+            <span class="summary-item summary-item--red">RED: <strong id="sumHigh">0</strong></span>
           </div>
           <ul class="anomaly-list" id="anomalyList"></ul>
           <div class="panel-foot">

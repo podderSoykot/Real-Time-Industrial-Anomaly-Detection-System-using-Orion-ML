@@ -31,6 +31,7 @@ let signalMode = "second";
 /** Display series for tooltips / anomaly markers (aligned with chart datasets). */
 let displayFlags = [];
 let displayMeta = [];
+let displayScores = [];
 
 const el = (id) => document.getElementById(id);
 
@@ -140,12 +141,91 @@ let wsPingTimer = null;
 let healthTimer = null;
 let anomalySession = 0;
 
+let currentDetectMode = null;
+let currentDbscanScoreThreshold = null;
+
 const epochMs = [];
 const values = [];
 const scores = [];
 const anomalyFlags = [];
 /** @type {Array<{ machine_name?: string, place?: string, line?: string, sensor_id?: string, zone?: string, shift?: string, notes?: string }>} */
 const pointMeta = [];
+
+let totalPointsSeen = 0;
+
+const filterMachine = el("filterMachine");
+const filterSensor = el("filterSensor");
+const btnFilterClear = el("btnFilterClear");
+let lastFilterOptionsAt = 0;
+
+function getFilterState() {
+  const sensor = filterSensor?.value ?? "";
+  const machine = filterMachine?.value ?? "";
+  return { sensor, machine };
+}
+
+function matchesFilter(meta) {
+  if (!meta) return true;
+  const { sensor, machine } = getFilterState();
+  if (sensor) return meta.sensor_id === sensor;
+  if (machine) return meta.machine_name === machine;
+  return true;
+}
+
+function getFilteredSeries() {
+  const { sensor, machine } = getFilterState();
+  const fe = [];
+  const fv = [];
+  const fs = [];
+  const ff = [];
+  const fm = [];
+  for (let i = 0; i < epochMs.length; i++) {
+    const m = pointMeta[i] || {};
+    const ok = sensor ? m.sensor_id === sensor : machine ? m.machine_name === machine : true;
+    if (!ok) continue;
+    fe.push(epochMs[i]);
+    fv.push(values[i]);
+    fs.push(scores[i]);
+    ff.push(anomalyFlags[i]);
+    fm.push(m);
+  }
+  return { epochMs: fe, values: fv, scores: fs, anomalyFlags: ff, meta: fm };
+}
+
+function repopulateSelect(selectEl, defaultLabel, values, keepValue) {
+  if (!selectEl) return;
+  const keepOk = keepValue && values.includes(keepValue);
+  selectEl.innerHTML = "";
+  const optAll = document.createElement("option");
+  optAll.value = "";
+  optAll.textContent = defaultLabel;
+  selectEl.appendChild(optAll);
+  for (const v of values) {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    selectEl.appendChild(opt);
+  }
+  selectEl.value = keepOk ? keepValue : "";
+}
+
+function updateFilterOptions() {
+  if (!filterMachine || !filterSensor) return;
+  const machines = new Set();
+  const sensors = new Set();
+  for (const m of pointMeta) {
+    if (!m) continue;
+    if (m.machine_name) machines.add(m.machine_name);
+    if (m.sensor_id) sensors.add(m.sensor_id);
+  }
+
+  const machineArr = [...machines].sort();
+  const sensorArr = [...sensors].sort();
+  const { sensor, machine } = getFilterState();
+
+  repopulateSelect(filterMachine, "All machines", machineArr, machine);
+  repopulateSelect(filterSensor, "All sensors", sensorArr, sensor);
+}
 
 const chartFont = "'DM Sans', system-ui, sans-serif";
 
@@ -172,7 +252,11 @@ const chart = new Chart(el("chartLive"), {
         borderWidth: 2.5,
         pointRadius: (ctx) => (displayFlags[ctx.dataIndex] ? 6 : 0),
         pointHoverRadius: 7,
-        pointBackgroundColor: "rgba(248, 113, 113, 0.95)",
+        pointBackgroundColor: (ctx) => {
+          const i = ctx.dataIndex;
+          if (!displayFlags[i]) return "rgba(0, 0, 0, 0)";
+          return severityToColor(scoreToSeverity(displayScores[i]));
+        },
         pointBorderColor: "#fff",
         pointBorderWidth: 1,
       },
@@ -198,11 +282,11 @@ const chart = new Chart(el("chartLive"), {
         position: "top",
         align: "end",
         labels: {
-          color: "#94a3b8",
-          font: { family: chartFont, size: 11, weight: "600" },
-          boxWidth: 10,
-          boxHeight: 10,
-          padding: 16,
+          color: "#cbd5e1",
+          font: { family: chartFont, size: 12, weight: "700" },
+          boxWidth: 9,
+          boxHeight: 9,
+          padding: 14,
           usePointStyle: true,
         },
       },
@@ -243,16 +327,16 @@ const chart = new Chart(el("chartLive"), {
           color: "#64748b",
           maxRotation: 0,
           autoSkip: true,
-          maxTicksLimit: 10,
-          font: { family: chartFont, size: 10 },
+          maxTicksLimit: 9,
+          font: { family: chartFont, size: 11, weight: "600" },
         },
-        grid: { color: "rgba(51, 65, 85, 0.35)" },
+        grid: { color: "rgba(71, 85, 105, 0.26)" },
         border: { display: false },
       },
       y: {
         position: "left",
-        ticks: { color: "#64748b", font: { family: chartFont, size: 10 } },
-        grid: { color: "rgba(51, 65, 85, 0.35)" },
+        ticks: { color: "#94a3b8", font: { family: chartFont, size: 11, weight: "600" } },
+        grid: { color: "rgba(71, 85, 105, 0.26)" },
         border: { display: false },
         title: {
           display: true,
@@ -264,7 +348,7 @@ const chart = new Chart(el("chartLive"), {
       y1: {
         position: "right",
         grid: { drawOnChartArea: false },
-        ticks: { color: "#64748b", font: { family: chartFont, size: 10 } },
+        ticks: { color: "#94a3b8", font: { family: chartFont, size: 11, weight: "600" } },
         border: { display: false },
         title: {
           display: true,
@@ -278,12 +362,14 @@ const chart = new Chart(el("chartLive"), {
 });
 
 function refreshLiveChart() {
-  const agg = aggregateSignal(signalMode, epochMs, values, scores, anomalyFlags, pointMeta);
+  const f = getFilteredSeries();
+  const agg = aggregateSignal(signalMode, f.epochMs, f.values, f.scores, f.anomalyFlags, f.meta);
   chart.data.labels = agg.labels;
   chart.data.datasets[0].data = agg.values;
   chart.data.datasets[1].data = agg.scores;
   displayFlags = agg.flags;
   displayMeta = agg.meta;
+  displayScores = agg.scores;
   chart.update("none");
 }
 
@@ -323,6 +409,84 @@ function isAnomalyFlag(row) {
   return v === true || v === 1 || v === "true";
 }
 
+function scoreToSeverity(score) {
+  const s = Number(score);
+  if (!Number.isFinite(s)) return "low";
+
+  if (currentDetectMode === "dbscan_cluster" && Number.isFinite(currentDbscanScoreThreshold)) {
+    const t = Number(currentDbscanScoreThreshold);
+    // DBSCAN score is distance-like and can vary by dataset/model.
+    // Use adaptive thresholds over recent scores above baseline threshold.
+    const pool = scores
+      .slice(-240)
+      .filter((v) => Number.isFinite(v) && v >= t)
+      .sort((a, b) => a - b);
+    if (pool.length >= 10) {
+      const p = (q) => {
+        const idx = Math.min(pool.length - 1, Math.max(0, Math.floor(q * (pool.length - 1))));
+        return pool[idx];
+      };
+      const medT = Math.max(t, p(0.50));
+      const highT = Math.max(medT, p(0.85));
+      if (s >= highT) return "high";
+      if (s >= medT) return "med";
+      return "low";
+    }
+    // Early fallback before enough samples accumulate.
+    if (s >= t * 2.2) return "high";
+    if (s >= t * 1.35) return "med";
+    return "low";
+  }
+
+  // Adaptive UI thresholds for rolling / unknown score scales.
+  // Prevents "all red" when score magnitudes are higher than expected.
+  const recent = scores.slice(-120).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (recent.length >= 12) {
+    const p = (q) => {
+      const idx = Math.min(recent.length - 1, Math.max(0, Math.floor(q * (recent.length - 1))));
+      return recent[idx];
+    };
+    const medT = p(0.55);
+    const highT = p(0.82);
+    if (s >= highT) return "high";
+    if (s >= medT) return "med";
+    return "low";
+  }
+
+  // Fallback defaults until enough points exist.
+  if (s >= 3) return "high";
+  if (s >= 1.5) return "med";
+  return "low";
+}
+
+function severityToColor(sev) {
+  if (sev === "high") return "rgba(248, 113, 113, 0.95)"; // red
+  if (sev === "med") return "rgba(250, 204, 21, 0.95)"; // yellow
+  return "rgba(34, 197, 94, 0.95)"; // green
+}
+
+function severityDisplay(sev) {
+  if (sev === "high") return "RED";
+  if (sev === "med") return "YELLOW";
+  return "GREEN";
+}
+
+function updateAnomalySummary(rows) {
+  let low = 0;
+  let med = 0;
+  let high = 0;
+  for (const r of rows) {
+    const sev = scoreToSeverity(r.score);
+    if (sev === "high") high += 1;
+    else if (sev === "med") med += 1;
+    else low += 1;
+  }
+  if (el("sumShown")) el("sumShown").textContent = String(rows.length);
+  if (el("sumLow")) el("sumLow").textContent = String(low);
+  if (el("sumMed")) el("sumMed").textContent = String(med);
+  if (el("sumHigh")) el("sumHigh").textContent = String(high);
+}
+
 function pushPoint(row, { silent = false, skipChart = false } = {}) {
   const ts = row.timestamp || row.t;
   epochMs.push(parseEpoch(ts));
@@ -339,10 +503,16 @@ function pushPoint(row, { silent = false, skipChart = false } = {}) {
   });
   const flag = isAnomalyFlag(row);
   anomalyFlags.push(flag);
+
+  totalPointsSeen += 1;
+  if (!silent && totalPointsSeen - lastFilterOptionsAt >= 40) {
+    updateFilterOptions();
+    lastFilterOptionsAt = totalPointsSeen;
+  }
+
   if (flag && !silent) {
     anomalySession += 1;
     prependAnomaly({ ...row, timestamp: ts });
-    updateSpotlight({ ...row, timestamp: ts });
   }
   trimBuffers();
   setKpi("kpiLastVal", values[values.length - 1]?.toFixed(2) ?? "—");
@@ -362,6 +532,7 @@ function ingestHistory(points) {
     pushPoint(p, { silent: true, skipChart: true });
   }
   anomalySession = points.filter((p) => isAnomalyFlag(p)).length;
+  updateFilterOptions();
   const flagged = points
     .filter((p) => isAnomalyFlag(p))
     .slice(-12)
@@ -382,11 +553,6 @@ function ingestHistory(points) {
     });
   }
   renderAnomalyList();
-  if (flagged.length > 0) {
-    updateSpotlight(flagged[0]);
-  } else if (el("anomalySpotlight")) {
-    el("anomalySpotlight").hidden = true;
-  }
   setKpi("kpiLastVal", values[values.length - 1]?.toFixed(2) ?? "—");
   setKpi("kpiAnomalies", String(anomalySession));
   refreshLiveChart();
@@ -427,32 +593,59 @@ function updateSpotlight(row) {
   const met = `${shortTime(ts)} · value ${Number(row.value).toFixed(3)} · score ${Number(row.score ?? 0).toFixed(3)}`;
   if (el("spotMetrics")) el("spotMetrics").textContent = met;
   if (el("spotNotes")) el("spotNotes").textContent = disp(row.notes);
+
+  const sev = scoreToSeverity(row.score ?? 0);
+  const badge = box.querySelector(".spotlight-badge");
+  if (badge) {
+    badge.classList.remove("spotlight-badge--low", "spotlight-badge--med", "spotlight-badge--high");
+    badge.classList.add(`spotlight-badge--${sev}`);
+    badge.textContent = `Latest anomaly · ${severityDisplay(sev)}`;
+  }
 }
 
 function renderAnomalyList() {
   const ul = el("anomalyList");
   if (!ul) return;
   ul.innerHTML = "";
+  const displayed = anomalyRows.filter((r) => matchesFilter(r));
+  updateAnomalySummary(displayed);
   if (anomalyRows.length === 0) {
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "No anomalies in this session yet.";
     ul.appendChild(li);
+    const box = el("anomalySpotlight");
+    if (box) box.hidden = true;
     return;
   }
-  for (const r of anomalyRows) {
+  if (displayed.length === 0) {
     const li = document.createElement("li");
-    li.className = "anomaly-card";
+    li.className = "empty";
+    li.textContent = "No anomalies match the current filter.";
+    ul.appendChild(li);
+    const box = el("anomalySpotlight");
+    if (box) box.hidden = true;
+    return;
+  }
+
+  for (const r of displayed) {
+    const sev = scoreToSeverity(r.score);
+    const li = document.createElement("li");
+    li.className = `anomaly-card anomaly-card--${sev}`;
 
     const top = document.createElement("div");
     top.className = "ac-top";
     const machine = document.createElement("span");
     machine.className = "ac-machine";
     machine.textContent = disp(r.machine_name);
+    const sevPill = document.createElement("span");
+    sevPill.className = `ac-sev ac-sev--${sev}`;
+    sevPill.textContent = severityDisplay(sev);
     const time = document.createElement("span");
     time.className = "ac-time";
     time.textContent = shortTime(r.ts);
     top.appendChild(machine);
+    top.appendChild(sevPill);
     top.appendChild(time);
 
     const place = document.createElement("div");
@@ -500,6 +693,9 @@ function renderAnomalyList() {
 
     ul.appendChild(li);
   }
+
+  // Keep spotlight consistent with the current filter.
+  updateSpotlight(displayed[0]);
 }
 
 renderAnomalyList();
@@ -517,6 +713,10 @@ function onWsMessage(ev) {
   }
   if (msg.type === "point") {
     pushPoint(msg);
+    return;
+  }
+  if (msg.type === "ack") {
+    // Optional: could update a "last ack" KPI; keep it quiet to avoid UI noise.
     return;
   }
   if (msg.type === "ping") {
@@ -578,6 +778,17 @@ async function pollStreamHealth() {
     const j = await r.json();
     setKpi("kpiBuffered", String(j.buffered_points ?? "—"));
     setKpi("kpiClients", String(j.clients ?? "—"));
+    setKpi("kpiDetectMode", disp(j.detect_mode ?? "—"));
+
+    currentDetectMode = j.detect_mode ?? null;
+    currentDbscanScoreThreshold = j.dbscan_score_threshold ?? null;
+
+    if (j.model_loaded === true) {
+      const src = j.model_source ? ` (${j.model_source})` : "";
+      setKpi("kpiModelLoaded", `Loaded${src}`, "status-ok");
+    } else {
+      setKpi("kpiModelLoaded", j.model_source ? `Not loaded (${j.model_source})` : "Not loaded", "status-warn");
+    }
     const wsLive = el("kpiWs")?.textContent === "Live";
     if (
       wsLive &&
@@ -591,6 +802,10 @@ async function pollStreamHealth() {
   } catch {
     setKpi("kpiBuffered", "—");
     setKpi("kpiClients", "—");
+    setKpi("kpiDetectMode", "—");
+    setKpi("kpiModelLoaded", "—");
+    currentDetectMode = null;
+    currentDbscanScoreThreshold = null;
   }
 }
 
@@ -631,6 +846,36 @@ el("btnHealth").addEventListener("click", async () => {
   const ok = await checkApiHealth();
   if (ok) connectWs();
 });
+
+if (filterMachine) {
+  filterMachine.addEventListener("change", () => {
+    // If machine is selected, clear sensor selection for unambiguous filtering.
+    if (filterMachine.value) {
+      if (filterSensor) filterSensor.value = "";
+    }
+    refreshLiveChart();
+    renderAnomalyList();
+  });
+}
+
+if (filterSensor) {
+  filterSensor.addEventListener("change", () => {
+    if (filterSensor.value) {
+      if (filterMachine) filterMachine.value = "";
+    }
+    refreshLiveChart();
+    renderAnomalyList();
+  });
+}
+
+if (btnFilterClear) {
+  btnFilterClear.addEventListener("click", () => {
+    if (filterMachine) filterMachine.value = "";
+    if (filterSensor) filterSensor.value = "";
+    refreshLiveChart();
+    renderAnomalyList();
+  });
+}
 
 if (healthTimer) clearInterval(healthTimer);
 healthTimer = setInterval(pollStreamHealth, 4000);

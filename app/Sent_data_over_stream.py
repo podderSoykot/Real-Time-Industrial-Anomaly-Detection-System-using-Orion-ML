@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import math
 import random
 import time
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -139,6 +141,82 @@ def iter_synthetic_values(
         i += step
 
 
+def iter_rows_from_csv(
+    csv_path: str | Path,
+    *,
+    max_points: int | None = None,
+    machine_name: str | None = None,
+    sensor_id: str | None = None,
+    include_state_in_notes: bool = True,
+) -> Iterator[dict]:
+    """
+    Yield payloads from a supervised PM CSV.
+
+    Expected columns include:
+      timestamp,value,machine_name,sensor_id
+    Optional:
+      place,line,zone,shift,notes,label,state
+    """
+    p = Path(csv_path)
+    if not p.exists():
+        raise FileNotFoundError(f"CSV not found: {p}")
+
+    sent = 0
+    with p.open("r", encoding="utf-8", newline="") as f:
+        r = csv.DictReader(f)
+        needed = {"timestamp", "value"}
+        miss = needed.difference(r.fieldnames or [])
+        if miss:
+            raise ValueError(f"CSV missing required columns: {sorted(miss)}")
+
+        for row in r:
+            if max_points is not None and sent >= max_points:
+                break
+
+            row_machine = (row.get("machine_name") or "").strip() or None
+            row_sensor = (row.get("sensor_id") or "").strip() or None
+            if machine_name and row_machine != machine_name:
+                continue
+            if sensor_id and row_sensor != sensor_id:
+                continue
+
+            ts_raw = (row.get("timestamp") or "").strip()
+            # Keep timestamp compatible with API parser. CSV is "YYYY-mm-dd HH:MM:SS".
+            ts = ts_raw if ts_raw else datetime.now(timezone.utc).isoformat()
+            try:
+                value = float(row["value"])
+            except Exception:
+                continue
+
+            notes = (row.get("notes") or "").strip()
+            if include_state_in_notes:
+                lab = (row.get("label") or "").strip()
+                st = (row.get("state") or "").strip()
+                extra = []
+                if lab:
+                    extra.append(f"label={lab}")
+                if st:
+                    extra.append(f"state={st}")
+                if extra:
+                    if notes:
+                        notes = notes + " | " + ", ".join(extra)
+                    else:
+                        notes = ", ".join(extra)
+
+            payload = {
+                "value": value,
+                "timestamp": ts,
+            }
+            for k in ("machine_name", "place", "line", "sensor_id", "zone", "shift"):
+                v = (row.get(k) or "").strip()
+                if v:
+                    payload[k] = v
+            if notes:
+                payload["notes"] = notes
+            sent += 1
+            yield payload
+
+
 def send_synthetic_to_stream_http(
     base_url: str,
     *,
@@ -190,6 +268,39 @@ def send_synthetic_to_stream_http(
         except URLError as e:
             raise RuntimeError(f"POST failed ({ingest_url}): {e}") from e
         n += 1
+        time.sleep(interval_sec)
+
+
+def send_csv_to_stream_http(
+    base_url: str,
+    csv_path: str | Path,
+    *,
+    interval_sec: float = 0.05,
+    max_points: int | None = None,
+    machine_name: str | None = None,
+    sensor_id: str | None = None,
+    include_state_in_notes: bool = True,
+) -> None:
+    ingest_url = urljoin(base_url.rstrip("/") + "/", "stream/ingest")
+    for payload in iter_rows_from_csv(
+        csv_path,
+        max_points=max_points,
+        machine_name=machine_name,
+        sensor_id=sensor_id,
+        include_state_in_notes=include_state_in_notes,
+    ):
+        body = json.dumps(payload).encode("utf-8")
+        req = Request(
+            ingest_url,
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urlopen(req, timeout=15.0) as resp:
+                resp.read()
+        except URLError as e:
+            raise RuntimeError(f"POST failed ({ingest_url}): {e}") from e
         time.sleep(interval_sec)
 
 
@@ -258,6 +369,49 @@ async def send_synthetic_to_stream_websocket(
                 pass
 
 
+async def send_csv_to_stream_websocket(
+    base_url: str,
+    csv_path: str | Path,
+    *,
+    interval_sec: float = 0.05,
+    max_points: int | None = None,
+    machine_name: str | None = None,
+    sensor_id: str | None = None,
+    include_state_in_notes: bool = True,
+) -> None:
+    try:
+        import websockets
+    except ImportError as e:
+        raise ImportError(
+            "WebSocket mode needs `websockets`. Install with: pip install websockets"
+        ) from e
+
+    ws_url = _http_base_to_ws_url(base_url)
+    async with websockets.connect(ws_url) as ws:
+
+        async def _drain_incoming() -> None:
+            while True:
+                await ws.recv()
+
+        drain = asyncio.create_task(_drain_incoming())
+        try:
+            for payload in iter_rows_from_csv(
+                csv_path,
+                max_points=max_points,
+                machine_name=machine_name,
+                sensor_id=sensor_id,
+                include_state_in_notes=include_state_in_notes,
+            ):
+                await ws.send(json.dumps(payload))
+                await asyncio.sleep(interval_sec)
+        finally:
+            drain.cancel()
+            try:
+                await drain
+            except asyncio.CancelledError:
+                pass
+
+
 def run_synthetic_producer(
     base_url: str,
     *,
@@ -272,8 +426,10 @@ def run_synthetic_producer(
     shift: str | None = None,
     notes: str | None = None,
     random_notes: bool = True,
+    csv_path: str | None = None,
+    include_state_in_notes: bool = True,
 ) -> None:
-    """Dispatch to HTTP or WebSocket producer."""
+    """Dispatch to synthetic or CSV producer over HTTP/WS."""
     if mode == "http":
         send_synthetic_to_stream_http(
             base_url,
@@ -304,19 +460,50 @@ def run_synthetic_producer(
                 random_notes=random_notes,
             )
         )
+    elif mode == "csv-http":
+        if not csv_path:
+            raise ValueError("csv-http mode requires --csv-path")
+        send_csv_to_stream_http(
+            base_url,
+            csv_path,
+            interval_sec=interval_sec,
+            max_points=max_points,
+            machine_name=machine_name,
+            sensor_id=sensor_id,
+            include_state_in_notes=include_state_in_notes,
+        )
+    elif mode == "csv-ws":
+        if not csv_path:
+            raise ValueError("csv-ws mode requires --csv-path")
+        asyncio.run(
+            send_csv_to_stream_websocket(
+                base_url,
+                csv_path,
+                interval_sec=interval_sec,
+                max_points=max_points,
+                machine_name=machine_name,
+                sensor_id=sensor_id,
+                include_state_in_notes=include_state_in_notes,
+            )
+        )
     else:
-        raise ValueError(f"Unknown mode: {mode!r} (use 'http' or 'ws')")
+        raise ValueError(f"Unknown mode: {mode!r} (use 'http', 'ws', 'csv-http', or 'csv-ws')")
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Send synthetic data to the stream API.")
+    p = argparse.ArgumentParser(description="Send synthetic or CSV replay data to the stream API.")
     p.add_argument(
         "--base-url",
         default="http://127.0.0.1:8000",
         help="API root (same host/port as uvicorn).",
     )
-    p.add_argument("--mode", choices=("http", "ws"), default="http", help="HTTP ingest or WebSocket send.")
-    p.add_argument("--interval", type=float, default=0.5, help="Seconds between samples.")
+    p.add_argument(
+        "--mode",
+        choices=("http", "ws", "csv-http", "csv-ws"),
+        default="http",
+        help="Synthetic HTTP/WS or CSV replay HTTP/WS.",
+    )
+    p.add_argument("--interval", type=float, default=0.5, help="Seconds between samples (CSV mode default suggested: 0.01-0.1).")
     p.add_argument("--max-points", type=int, default=None, help="Stop after N samples (default: run forever).")
     p.add_argument("--machine", default=None, help="Fixed machine name (default: rotate demo assets).")
     p.add_argument("--place", default=None, help="Fixed site / place.")
@@ -325,6 +512,12 @@ def main() -> None:
     p.add_argument("--zone", default=None, help="Fixed floor / area.")
     p.add_argument("--shift", default=None, help="Fixed shift id.")
     p.add_argument("--notes", default=None, help="Fixed notes string (omit for random occasional notes).")
+    p.add_argument("--csv-path", default=None, help="CSV path for csv-http/csv-ws modes.")
+    p.add_argument(
+        "--no-state-in-notes",
+        action="store_true",
+        help="CSV mode: do not append label/state values to notes.",
+    )
     p.add_argument(
         "--no-random-notes",
         action="store_true",
@@ -344,6 +537,8 @@ def main() -> None:
         shift=args.shift,
         notes=args.notes,
         random_notes=not args.no_random_notes,
+        csv_path=args.csv_path,
+        include_state_in_notes=not args.no_state_in_notes,
     )
 
 
