@@ -183,48 +183,55 @@
           </div>
         </section>
 
-        <aside class="panel side-panel">
-          <div class="panel-head">
+        <aside class="panel side-panel anomaly-log">
+          <div class="panel-head anomaly-log__head">
             <div class="panel-title">
               <h2>Anomaly log</h2>
-              <span class="chip chip--warn">Detected</span>
+              <span class="chip chip--warn">Events</span>
             </div>
-            <span class="hint">Filter by machine or sensor</span>
           </div>
-          <div class="filters">
-            <label class="field-inline">
-              <span>Machine</span>
-              <select id="filterMachine">
-                <option value="">All machines</option>
-              </select>
-            </label>
-            <label class="field-inline">
-              <span>Sensor</span>
-              <select id="filterSensor">
-                <option value="">All sensors</option>
-              </select>
-            </label>
-            <button type="button" class="btn btn-ghost btn-filter-clear" id="btnFilterClear">
-              Clear
-            </button>
+          <div class="anomaly-log__toolbar">
+            <div class="anomaly-log__filters filters">
+              <label class="field-inline">
+                <span>Machine</span>
+                <select id="filterMachine">
+                  <option value="">All machines</option>
+                </select>
+              </label>
+              <label class="field-inline">
+                <span>Sensor</span>
+                <select id="filterSensor">
+                  <option value="">All sensors</option>
+                </select>
+              </label>
+              <button type="button" class="btn btn-ghost btn-filter-clear" id="btnFilterClear">
+                Clear
+              </button>
+            </div>
+            <div class="anomaly-log__stats" role="group" aria-label="Anomaly counts by severity">
+              <div class="log-stat log-stat--total">
+                <span class="log-stat__value" id="sumShown">0</span>
+                <span class="log-stat__label">Listed</span>
+              </div>
+              <div class="log-stat log-stat--green">
+                <span class="log-stat__value" id="sumLow">0</span>
+                <span class="log-stat__label">Green</span>
+              </div>
+              <div class="log-stat log-stat--yellow">
+                <span class="log-stat__value" id="sumMed">0</span>
+                <span class="log-stat__label">Yellow</span>
+              </div>
+              <div class="log-stat log-stat--red">
+                <span class="log-stat__value" id="sumHigh">0</span>
+                <span class="log-stat__label">Red</span>
+              </div>
+            </div>
           </div>
-          <div class="anomaly-summary" aria-label="Anomaly summary">
-            <span class="summary-item">Shown: <strong id="sumShown">0</strong></span>
-            <span class="summary-item summary-item--green">GREEN: <strong id="sumLow">0</strong></span>
-            <span class="summary-item summary-item--yellow">YELLOW: <strong id="sumMed">0</strong></span>
-            <span class="summary-item summary-item--red">RED: <strong id="sumHigh">0</strong></span>
+          <div class="anomaly-log__peek anomaly-hover" id="anomalyHover" aria-live="polite">
+            <p class="anomaly-hover__hint">Hover any row for the full log.</p>
+            <div class="anomaly-hover__lines" id="anomalyHoverLines">—</div>
           </div>
-          <div class="anomaly-hover" id="anomalyHover" aria-live="polite">
-            <span class="anomaly-hover__hint">Hover a card below for a large detail view.</span>
-            <span class="anomaly-hover__text" id="anomalyHoverText">—</span>
-          </div>
-          <ul class="anomaly-list" id="anomalyList"></ul>
-          <div class="panel-foot">
-            <p class="hint">
-              Feed via <code>python -m app.Sent_data_over_stream</code> or demo stream on the API
-              (<code>STREAM_SYNTHETIC=0</code> to disable).
-            </p>
-          </div>
+          <ul class="anomaly-list anomaly-log__list" id="anomalyList"></ul>
         </aside>
       </main>
 
@@ -246,49 +253,20 @@
       hidden
       role="dialog"
       aria-modal="true"
-      aria-labelledby="anomalyHoverBigTitle"
+      aria-labelledby="anomalyHoverBigHeading"
     >
-      <div class="anomaly-hover-big__card">
-        <div class="anomaly-hover-big__head">
-          <span id="anomalyHoverBigSev" class="anomaly-hover-big__sev"></span>
-          <h3 id="anomalyHoverBigTitle" class="anomaly-hover-big__title"></h3>
-          <time id="anomalyHoverBigTime" class="anomaly-hover-big__time"></time>
-        </div>
-        <dl class="anomaly-hover-big__dl">
-          <div class="anomaly-hover-big__row">
-            <dt>Place</dt>
-            <dd id="anomalyHoverBigPlace"></dd>
+      <div class="anomaly-hover-big__shell">
+        <header class="anomaly-hover-big__top">
+          <div class="anomaly-hover-big__top-row">
+            <h2 id="anomalyHoverBigHeading" class="anomaly-hover-big__heading">Anomaly log</h2>
+            <button type="button" class="btn btn-ghost anomaly-hover-big__close" id="anomalyHoverBigClose">
+              Close
+            </button>
           </div>
-          <div class="anomaly-hover-big__row">
-            <dt>Line</dt>
-            <dd id="anomalyHoverBigLine"></dd>
-          </div>
-          <div class="anomaly-hover-big__row">
-            <dt>Sensor</dt>
-            <dd id="anomalyHoverBigSensor" class="mono"></dd>
-          </div>
-          <div class="anomaly-hover-big__row">
-            <dt>Zone</dt>
-            <dd id="anomalyHoverBigZone"></dd>
-          </div>
-          <div class="anomaly-hover-big__row">
-            <dt>Shift</dt>
-            <dd id="anomalyHoverBigShift"></dd>
-          </div>
-          <div class="anomaly-hover-big__row">
-            <dt>Value</dt>
-            <dd id="anomalyHoverBigValue" class="mono"></dd>
-          </div>
-          <div class="anomaly-hover-big__row">
-            <dt>Score</dt>
-            <dd id="anomalyHoverBigScore" class="mono"></dd>
-          </div>
-          <div class="anomaly-hover-big__row anomaly-hover-big__row--full">
-            <dt>Notes</dt>
-            <dd id="anomalyHoverBigNotes"></dd>
-          </div>
-        </dl>
-        <p class="anomaly-hover-big__hint">Move pointer here to read · click backdrop or press Esc to close</p>
+          <p class="anomaly-hover-big__sub">All entries in the current list · highlighted row matches your card</p>
+        </header>
+        <div id="anomalyHoverBigList" class="anomaly-hover-big__list"></div>
+        <p class="anomaly-hover-big__hint">Move pointer here to read · Close or Esc to dismiss</p>
       </div>
     </div>
 
