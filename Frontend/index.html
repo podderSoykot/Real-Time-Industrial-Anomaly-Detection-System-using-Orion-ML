@@ -214,6 +214,10 @@
             <span class="summary-item summary-item--yellow">YELLOW: <strong id="sumMed">0</strong></span>
             <span class="summary-item summary-item--red">RED: <strong id="sumHigh">0</strong></span>
           </div>
+          <div class="anomaly-hover" id="anomalyHover" aria-live="polite">
+            <span class="anomaly-hover__hint">Hover a card below for a large detail view.</span>
+            <span class="anomaly-hover__text" id="anomalyHoverText">—</span>
+          </div>
           <ul class="anomaly-list" id="anomalyList"></ul>
           <div class="panel-foot">
             <p class="hint">
@@ -229,6 +233,65 @@
         <span id="footerMsg">Configure API base, then connect the stream.</span>
       </footer>
     </div>
+
+    <div
+      id="anomalyHoverBackdrop"
+      class="anomaly-hover-backdrop"
+      hidden
+      aria-hidden="true"
+    ></div>
+    <div
+      id="anomalyHoverBig"
+      class="anomaly-hover-big"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="anomalyHoverBigTitle"
+    >
+      <div class="anomaly-hover-big__card">
+        <div class="anomaly-hover-big__head">
+          <span id="anomalyHoverBigSev" class="anomaly-hover-big__sev"></span>
+          <h3 id="anomalyHoverBigTitle" class="anomaly-hover-big__title"></h3>
+          <time id="anomalyHoverBigTime" class="anomaly-hover-big__time"></time>
+        </div>
+        <dl class="anomaly-hover-big__dl">
+          <div class="anomaly-hover-big__row">
+            <dt>Place</dt>
+            <dd id="anomalyHoverBigPlace"></dd>
+          </div>
+          <div class="anomaly-hover-big__row">
+            <dt>Line</dt>
+            <dd id="anomalyHoverBigLine"></dd>
+          </div>
+          <div class="anomaly-hover-big__row">
+            <dt>Sensor</dt>
+            <dd id="anomalyHoverBigSensor" class="mono"></dd>
+          </div>
+          <div class="anomaly-hover-big__row">
+            <dt>Zone</dt>
+            <dd id="anomalyHoverBigZone"></dd>
+          </div>
+          <div class="anomaly-hover-big__row">
+            <dt>Shift</dt>
+            <dd id="anomalyHoverBigShift"></dd>
+          </div>
+          <div class="anomaly-hover-big__row">
+            <dt>Value</dt>
+            <dd id="anomalyHoverBigValue" class="mono"></dd>
+          </div>
+          <div class="anomaly-hover-big__row">
+            <dt>Score</dt>
+            <dd id="anomalyHoverBigScore" class="mono"></dd>
+          </div>
+          <div class="anomaly-hover-big__row anomaly-hover-big__row--full">
+            <dt>Notes</dt>
+            <dd id="anomalyHoverBigNotes"></dd>
+          </div>
+        </dl>
+        <p class="anomaly-hover-big__hint">Move pointer here to read · click backdrop or press Esc to close</p>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
