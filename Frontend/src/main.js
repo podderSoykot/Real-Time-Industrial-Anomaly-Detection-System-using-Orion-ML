@@ -512,55 +512,129 @@ function scheduleHideAnomalyHoverBig() {
   }, 480);
 }
 
-function showAnomalyHoverBig(row) {
-  cancelHideAnomalyHoverBig();
-  const bd = el("anomalyHoverBackdrop");
-  const big = el("anomalyHoverBig");
-  if (!bd || !big || !row) return;
+function appendPeekRow(container, row) {
   const sev = scoreToSeverity(row.score);
-  const sevEl = el("anomalyHoverBigSev");
-  if (sevEl) {
-    sevEl.textContent = severityDisplay(sev);
-    sevEl.className = `anomaly-hover-big__sev anomaly-hover-big__sev--${sev}`;
-  }
-  if (el("anomalyHoverBigTitle")) el("anomalyHoverBigTitle").textContent = disp(row.machine_name);
-  if (el("anomalyHoverBigTime")) el("anomalyHoverBigTime").textContent = shortTime(row.ts);
-  if (el("anomalyHoverBigPlace")) el("anomalyHoverBigPlace").textContent = disp(row.place);
-  if (el("anomalyHoverBigLine")) el("anomalyHoverBigLine").textContent = disp(row.line);
-  if (el("anomalyHoverBigSensor")) el("anomalyHoverBigSensor").textContent = disp(row.sensor_id);
-  if (el("anomalyHoverBigZone")) el("anomalyHoverBigZone").textContent = disp(row.zone);
-  if (el("anomalyHoverBigShift")) el("anomalyHoverBigShift").textContent = disp(row.shift);
-  if (el("anomalyHoverBigValue")) el("anomalyHoverBigValue").textContent = Number(row.value).toFixed(3);
-  if (el("anomalyHoverBigScore")) el("anomalyHoverBigScore").textContent = Number(row.score).toFixed(3);
-  if (el("anomalyHoverBigNotes")) el("anomalyHoverBigNotes").textContent = disp(row.notes);
-  bd.hidden = false;
-  big.hidden = false;
-  document.body.style.overflow = "hidden";
+  const wrap = document.createElement("div");
+  wrap.className = `peek-row peek-row--${sev}`;
+  const top = document.createElement("div");
+  top.className = "peek-row__top";
+  const title = document.createElement("span");
+  title.className = "peek-row__title";
+  title.textContent = disp(row.machine_name);
+  const pill = document.createElement("span");
+  pill.className = `peek-row__sev peek-row__sev--${sev}`;
+  pill.textContent = severityDisplay(sev);
+  const time = document.createElement("span");
+  time.className = "peek-row__time";
+  time.textContent = shortTime(row.ts);
+  top.append(title, pill, time);
+  const sub = document.createElement("div");
+  sub.className = "peek-row__sub mono";
+  sub.textContent = `${disp(row.sensor_id)} · ${Number(row.value).toFixed(2)} · ${Number(row.score).toFixed(2)}`;
+  wrap.append(top, sub);
+  container.appendChild(wrap);
 }
 
-function setAnomalyHover(row) {
-  const out = el("anomalyHoverText");
-  if (!out) return;
-  if (!row) {
-    out.textContent = "—";
+function setAnomalyHoverRows(rows) {
+  const container = el("anomalyHoverLines");
+  if (!container) return;
+  if (!rows.length) {
+    container.textContent = "—";
     hideAnomalyHoverBig();
     return;
   }
-  const sev = severityDisplay(scoreToSeverity(row.score));
-  out.textContent =
-    `${sev} | ${shortTime(row.ts)} | ${disp(row.machine_name)} | ${disp(row.sensor_id)} | ` +
-    `value ${Number(row.value).toFixed(3)} | score ${Number(row.score).toFixed(3)} | ` +
-    `line ${disp(row.line)} | zone ${disp(row.zone)} | shift ${disp(row.shift)} | notes ${disp(row.notes)}`;
+  container.replaceChildren();
+  for (const row of rows) {
+    appendPeekRow(container, row);
+  }
+}
+
+function showAnomalyHoverBig(focusRow, allRows) {
+  cancelHideAnomalyHoverBig();
+  const bd = el("anomalyHoverBackdrop");
+  const big = el("anomalyHoverBig");
+  const list = el("anomalyHoverBigList");
+  if (!bd || !big || !list || !allRows?.length) return;
+
+  list.replaceChildren();
+  for (const row of allRows) {
+    const sev = scoreToSeverity(row.score);
+    const art = document.createElement("article");
+    art.className = `anomaly-hover-big-item anomaly-hover-big-item--${sev}`;
+    if (row === focusRow) art.classList.add("anomaly-hover-big-item--focus");
+
+    const head = document.createElement("header");
+    head.className = "anomaly-hover-big-item__head";
+    const sevEl = document.createElement("span");
+    sevEl.className = `anomaly-hover-big__sev anomaly-hover-big__sev--${sev}`;
+    sevEl.textContent = severityDisplay(sev);
+    const h3 = document.createElement("h3");
+    h3.className = "anomaly-hover-big-item__title";
+    h3.textContent = disp(row.machine_name);
+    const timeEl = document.createElement("time");
+    timeEl.className = "anomaly-hover-big-item__time";
+    timeEl.textContent = shortTime(row.ts);
+    head.append(sevEl, h3, timeEl);
+
+    const dl = document.createElement("dl");
+    dl.className = "anomaly-hover-big__dl anomaly-hover-big-item__dl";
+    const fields = [
+      ["Place", disp(row.place), false],
+      ["Line", disp(row.line), false],
+      ["Sensor", disp(row.sensor_id), true],
+      ["Zone", disp(row.zone), false],
+      ["Shift", disp(row.shift), false],
+      ["Value", Number(row.value).toFixed(3), true],
+      ["Score", Number(row.score).toFixed(3), true],
+      ["Notes", disp(row.notes), false],
+    ];
+    for (const [label, value, mono] of fields) {
+      const rowDiv = document.createElement("div");
+      rowDiv.className =
+        label === "Notes"
+          ? "anomaly-hover-big__row anomaly-hover-big__row--full"
+          : "anomaly-hover-big__row";
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      if (mono) dd.classList.add("mono");
+      dd.textContent = value;
+      rowDiv.append(dt, dd);
+      dl.appendChild(rowDiv);
+    }
+    art.append(head, dl);
+    list.appendChild(art);
+  }
+
+  bd.hidden = false;
+  big.hidden = false;
+  document.body.style.overflow = "hidden";
+
+  if (focusRow) {
+    requestAnimationFrame(() => {
+      list.querySelector(".anomaly-hover-big-item--focus")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }
 }
 
 function initAnomalyHoverBigUi() {
   const bd = el("anomalyHoverBackdrop");
-  const card = document.querySelector(".anomaly-hover-big__card");
+  const big = el("anomalyHoverBig");
+  const shell = document.querySelector(".anomaly-hover-big__shell");
+  const closeBtn = el("anomalyHoverBigClose");
   bd?.addEventListener("click", () => hideAnomalyHoverBig());
-  card?.addEventListener("mouseenter", () => cancelHideAnomalyHoverBig());
-  card?.addEventListener("mouseleave", () => scheduleHideAnomalyHoverBig());
+  big?.addEventListener("click", (e) => {
+    if (e.target === big) hideAnomalyHoverBig();
+  });
+  shell?.addEventListener("click", (e) => e.stopPropagation());
+  closeBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideAnomalyHoverBig();
+  });
+  shell?.addEventListener("mouseenter", () => cancelHideAnomalyHoverBig());
+  shell?.addEventListener("mouseleave", () => scheduleHideAnomalyHoverBig());
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && bd && !bd.hidden) hideAnomalyHoverBig();
+    if (e.key === "Escape" && big && !big.hidden) hideAnomalyHoverBig();
   });
 }
 
@@ -689,7 +763,7 @@ function renderAnomalyList() {
   const displayed = anomalyRows.filter((r) => matchesFilter(r));
   updateAnomalySummary(displayed);
   if (anomalyRows.length === 0) {
-    setAnomalyHover(null);
+    setAnomalyHoverRows([]);
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "No anomalies in this session yet.";
@@ -699,7 +773,7 @@ function renderAnomalyList() {
     return;
   }
   if (displayed.length === 0) {
-    setAnomalyHover(null);
+    setAnomalyHoverRows([]);
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "No anomalies match the current filter.";
@@ -714,77 +788,81 @@ function renderAnomalyList() {
     const li = document.createElement("li");
     li.className = `anomaly-card anomaly-card--${sev}`;
     li.tabIndex = 0;
-    li.title = "Hover for large anomaly details";
+    li.title = "Hover for full-page anomaly log (all entries)";
 
-    const top = document.createElement("div");
-    top.className = "ac-top";
+    const primary = document.createElement("div");
+    primary.className = "ac-primary";
     const machine = document.createElement("span");
     machine.className = "ac-machine";
     machine.textContent = disp(r.machine_name);
     const sevPill = document.createElement("span");
-    sevPill.className = `ac-sev ac-sev--${sev}`;
+    sevPill.className = `ac-badge ac-badge--${sev}`;
     sevPill.textContent = severityDisplay(sev);
-    const time = document.createElement("span");
-    time.className = "ac-time";
+    const time = document.createElement("time");
+    time.className = "ac-when";
+    time.dateTime = String(r.ts ?? "");
     time.textContent = shortTime(r.ts);
-    top.appendChild(machine);
-    top.appendChild(sevPill);
-    top.appendChild(time);
+    primary.append(machine, sevPill, time);
 
-    const place = document.createElement("div");
-    place.className = "ac-place";
-    place.textContent = disp(r.place);
+    li.appendChild(primary);
 
-    const row2 = document.createElement("div");
-    row2.className = "ac-row";
-    const line = document.createElement("span");
-    line.className = "ac-meta";
-    line.textContent = `Line: ${disp(r.line)}`;
-    const sensor = document.createElement("span");
-    sensor.className = "ac-meta mono";
-    sensor.textContent = `Sensor: ${disp(r.sensor_id)}`;
-    row2.appendChild(line);
-    row2.appendChild(sensor);
+    const placeText = disp(r.place);
+    if (placeText) {
+      const place = document.createElement("p");
+      place.className = "ac-place";
+      place.textContent = placeText;
+      li.appendChild(place);
+    }
 
-    const row3 = document.createElement("div");
-    row3.className = "ac-row";
-    const zone = document.createElement("span");
-    zone.className = "ac-meta";
-    zone.textContent = `Zone: ${disp(r.zone)}`;
-    const shift = document.createElement("span");
-    shift.className = "ac-meta";
-    shift.textContent = `Shift: ${disp(r.shift)}`;
-    row3.appendChild(zone);
-    row3.appendChild(shift);
+    const stats = document.createElement("div");
+    stats.className = "ac-stats";
+    for (const [label, val, useMono] of [
+      ["Value", Number(r.value).toFixed(3), true],
+      ["Score", Number(r.score).toFixed(3), true],
+      ["Sensor", disp(r.sensor_id), true],
+    ]) {
+      const cell = document.createElement("div");
+      cell.className = "ac-stats__cell";
+      const lab = document.createElement("span");
+      lab.className = "ac-stats__label";
+      lab.textContent = label;
+      const v = document.createElement("span");
+      v.className = useMono ? "ac-stats__value mono" : "ac-stats__value";
+      v.textContent = val;
+      cell.append(lab, v);
+      stats.appendChild(cell);
+    }
+    li.appendChild(stats);
 
-    const metrics = document.createElement("div");
-    metrics.className = "ac-metrics";
-    metrics.textContent = `Value ${Number(r.value).toFixed(3)} · score ${Number(r.score).toFixed(3)}`;
-
-    li.appendChild(top);
-    li.appendChild(place);
-    li.appendChild(row2);
-    li.appendChild(row3);
-    li.appendChild(metrics);
+    const ctxParts = [];
+    const lineT = disp(r.line);
+    const zoneT = disp(r.zone);
+    const shiftT = disp(r.shift);
+    if (lineT) ctxParts.push(`Line ${lineT}`);
+    if (zoneT) ctxParts.push(zoneT);
+    if (shiftT) ctxParts.push(`Shift ${shiftT}`);
+    if (ctxParts.length) {
+      const ctx = document.createElement("p");
+      ctx.className = "ac-context";
+      ctx.textContent = ctxParts.join(" · ");
+      li.appendChild(ctx);
+    }
 
     if (r.notes) {
-      const note = document.createElement("div");
+      const note = document.createElement("p");
       note.className = "ac-notes";
       note.textContent = String(r.notes);
       li.appendChild(note);
     }
 
     li.addEventListener("mouseenter", () => {
-      showAnomalyHoverBig(r);
-      setAnomalyHover(r);
+      showAnomalyHoverBig(r, displayed);
     });
     li.addEventListener("focus", () => {
-      showAnomalyHoverBig(r);
-      setAnomalyHover(r);
+      showAnomalyHoverBig(r, displayed);
     });
     li.addEventListener("mouseleave", () => {
       scheduleHideAnomalyHoverBig();
-      setAnomalyHover(displayed[0] ?? null);
     });
     li.addEventListener("blur", () => scheduleHideAnomalyHoverBig());
 
@@ -793,7 +871,7 @@ function renderAnomalyList() {
 
   // Keep spotlight consistent with the current filter.
   updateSpotlight(displayed[0]);
-  setAnomalyHover(displayed[0]);
+  setAnomalyHoverRows(displayed);
 }
 
 renderAnomalyList();
@@ -894,9 +972,7 @@ async function pollStreamHealth() {
       Number(j.buffered_points) === 0 &&
       j.synthetic === false
     ) {
-      setFooter(
-        "Stream connected but buffer is empty. Run: python -m app.Sent_data_over_stream — or unset STREAM_SYNTHETIC=0 on the API."
-      );
+      setFooter("Stream connected but buffer is empty.");
     }
   } catch {
     setKpi("kpiBuffered", "—");
