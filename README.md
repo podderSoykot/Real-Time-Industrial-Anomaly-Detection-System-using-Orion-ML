@@ -4,9 +4,15 @@ This repo provides a starting point for building a streaming anomaly detection s
 
 ## Dashboard Preview
 
-Latest anomaly dashboard snapshot:
+Latest anomaly dashboard snapshots:
 
-![Anomaly Dashboard](snap.png)
+### Full dashboard
+
+![Anomaly Dashboard (Full)](snap.png)
+
+### Anomaly log focus
+
+![Anomaly Log (Hover/Detail View)](assets/c__Users_Windows_10_Pro_AppData_Roaming_Cursor_User_workspaceStorage_42de91e139186f91703886a706bb0ed6_images_image-bbd4cfc4-1a35-40a4-a6e7-b84005e32ada.png)
 
 ## Dataset
 

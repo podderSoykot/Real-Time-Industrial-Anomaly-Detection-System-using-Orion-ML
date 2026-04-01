@@ -487,6 +487,83 @@ function updateAnomalySummary(rows) {
   if (el("sumHigh")) el("sumHigh").textContent = String(high);
 }
 
+let anomalyHoverHideTimer = null;
+
+function hideAnomalyHoverBig() {
+  const bd = el("anomalyHoverBackdrop");
+  const big = el("anomalyHoverBig");
+  if (bd) bd.hidden = true;
+  if (big) big.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function cancelHideAnomalyHoverBig() {
+  if (anomalyHoverHideTimer) {
+    window.clearTimeout(anomalyHoverHideTimer);
+    anomalyHoverHideTimer = null;
+  }
+}
+
+function scheduleHideAnomalyHoverBig() {
+  cancelHideAnomalyHoverBig();
+  anomalyHoverHideTimer = window.setTimeout(() => {
+    hideAnomalyHoverBig();
+    anomalyHoverHideTimer = null;
+  }, 480);
+}
+
+function showAnomalyHoverBig(row) {
+  cancelHideAnomalyHoverBig();
+  const bd = el("anomalyHoverBackdrop");
+  const big = el("anomalyHoverBig");
+  if (!bd || !big || !row) return;
+  const sev = scoreToSeverity(row.score);
+  const sevEl = el("anomalyHoverBigSev");
+  if (sevEl) {
+    sevEl.textContent = severityDisplay(sev);
+    sevEl.className = `anomaly-hover-big__sev anomaly-hover-big__sev--${sev}`;
+  }
+  if (el("anomalyHoverBigTitle")) el("anomalyHoverBigTitle").textContent = disp(row.machine_name);
+  if (el("anomalyHoverBigTime")) el("anomalyHoverBigTime").textContent = shortTime(row.ts);
+  if (el("anomalyHoverBigPlace")) el("anomalyHoverBigPlace").textContent = disp(row.place);
+  if (el("anomalyHoverBigLine")) el("anomalyHoverBigLine").textContent = disp(row.line);
+  if (el("anomalyHoverBigSensor")) el("anomalyHoverBigSensor").textContent = disp(row.sensor_id);
+  if (el("anomalyHoverBigZone")) el("anomalyHoverBigZone").textContent = disp(row.zone);
+  if (el("anomalyHoverBigShift")) el("anomalyHoverBigShift").textContent = disp(row.shift);
+  if (el("anomalyHoverBigValue")) el("anomalyHoverBigValue").textContent = Number(row.value).toFixed(3);
+  if (el("anomalyHoverBigScore")) el("anomalyHoverBigScore").textContent = Number(row.score).toFixed(3);
+  if (el("anomalyHoverBigNotes")) el("anomalyHoverBigNotes").textContent = disp(row.notes);
+  bd.hidden = false;
+  big.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function setAnomalyHover(row) {
+  const out = el("anomalyHoverText");
+  if (!out) return;
+  if (!row) {
+    out.textContent = "—";
+    hideAnomalyHoverBig();
+    return;
+  }
+  const sev = severityDisplay(scoreToSeverity(row.score));
+  out.textContent =
+    `${sev} | ${shortTime(row.ts)} | ${disp(row.machine_name)} | ${disp(row.sensor_id)} | ` +
+    `value ${Number(row.value).toFixed(3)} | score ${Number(row.score).toFixed(3)} | ` +
+    `line ${disp(row.line)} | zone ${disp(row.zone)} | shift ${disp(row.shift)} | notes ${disp(row.notes)}`;
+}
+
+function initAnomalyHoverBigUi() {
+  const bd = el("anomalyHoverBackdrop");
+  const card = document.querySelector(".anomaly-hover-big__card");
+  bd?.addEventListener("click", () => hideAnomalyHoverBig());
+  card?.addEventListener("mouseenter", () => cancelHideAnomalyHoverBig());
+  card?.addEventListener("mouseleave", () => scheduleHideAnomalyHoverBig());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && bd && !bd.hidden) hideAnomalyHoverBig();
+  });
+}
+
 function pushPoint(row, { silent = false, skipChart = false } = {}) {
   const ts = row.timestamp || row.t;
   epochMs.push(parseEpoch(ts));
@@ -606,10 +683,13 @@ function updateSpotlight(row) {
 function renderAnomalyList() {
   const ul = el("anomalyList");
   if (!ul) return;
+  cancelHideAnomalyHoverBig();
+  hideAnomalyHoverBig();
   ul.innerHTML = "";
   const displayed = anomalyRows.filter((r) => matchesFilter(r));
   updateAnomalySummary(displayed);
   if (anomalyRows.length === 0) {
+    setAnomalyHover(null);
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "No anomalies in this session yet.";
@@ -619,6 +699,7 @@ function renderAnomalyList() {
     return;
   }
   if (displayed.length === 0) {
+    setAnomalyHover(null);
     const li = document.createElement("li");
     li.className = "empty";
     li.textContent = "No anomalies match the current filter.";
@@ -632,6 +713,8 @@ function renderAnomalyList() {
     const sev = scoreToSeverity(r.score);
     const li = document.createElement("li");
     li.className = `anomaly-card anomaly-card--${sev}`;
+    li.tabIndex = 0;
+    li.title = "Hover for large anomaly details";
 
     const top = document.createElement("div");
     top.className = "ac-top";
@@ -691,14 +774,30 @@ function renderAnomalyList() {
       li.appendChild(note);
     }
 
+    li.addEventListener("mouseenter", () => {
+      showAnomalyHoverBig(r);
+      setAnomalyHover(r);
+    });
+    li.addEventListener("focus", () => {
+      showAnomalyHoverBig(r);
+      setAnomalyHover(r);
+    });
+    li.addEventListener("mouseleave", () => {
+      scheduleHideAnomalyHoverBig();
+      setAnomalyHover(displayed[0] ?? null);
+    });
+    li.addEventListener("blur", () => scheduleHideAnomalyHoverBig());
+
     ul.appendChild(li);
   }
 
   // Keep spotlight consistent with the current filter.
   updateSpotlight(displayed[0]);
+  setAnomalyHover(displayed[0]);
 }
 
 renderAnomalyList();
+initAnomalyHoverBigUi();
 
 function onWsMessage(ev) {
   let msg;
